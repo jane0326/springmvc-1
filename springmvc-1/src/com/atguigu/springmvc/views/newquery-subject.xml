@@ -13,10 +13,10 @@
 		select id from(
 	<choose>
 		<when test='dateType != null '>
-		select to_char(to_date(max(acct_date),'yyyymmdd'),'yyyy-mm-dd') ID from DM.V_DM_KPI_D_001001
+		select to_char(to_date(max(day_id),'yyyymmdd'),'yyyy-mm-dd') ID from dw_4g_acct_day
 		</when>
 		<otherwise>
-		select to_char(to_date(max(MONTH_ID),'yyyymm'),'yyyy-mm') ID from DM.V_DM_KPI_M_001001
+		select to_char(to_date(max(MONTH_ID),'yyyymm'),'yyyy-mm') ID from dw_4g_acct_month
 		</otherwise>
 	</choose>
 	)
@@ -26,26 +26,27 @@
 	<select id="area" resultType="java.util.Map">
 select prov_id,pro_name,area_id,area_desc from 
     (select p.prov_id,p.pro_name,a.area_id,a.area_desc,a.ord 
-    from dmcode_pub.dmcode_province p
-    left join dmcode_pub.dmcode_area a
+    from dmcode_province p
+    left join dmcode_area a
     on p.prov_id=a.prov_id
     where a.is_valid = '1' and p.s_n_mark is not null and a.area_id !='999'
     union all
     select '111' prov_id,'全国' pro_name，area_id,area_desc,ord
-    from dmcode_pub.dmcode_area 
+    from dmcode_area 
     where is_valid ='1'and area_id !='999'
     union all
     select '112' prov_id,'北十省'pro_name,a.area_id,a.area_desc,a.ord
-    from dmcode_pub.dmcode_province p
-    left join dmcode_pub.dmcode_area a
+    from dmcode_province p
+    left join dmcode_area a
     on p.prov_id=a.prov_id
     where a.is_valid = '1' and p.s_n_mark='10'and a.area_id !='999'
     union all
     select '113' prov_id,'南二十一省'pro_name,a.area_id,a.area_desc,a.ord
-    from dmcode_pub.dmcode_province p
-    left join dmcode_pub.dmcode_area a
+    from dmcode_province p
+    left join dmcode_area a
     on p.prov_id=a.prov_id
     where a.is_valid = '1' and p.s_n_mark='21'and a.area_id!='999'
+    
     )
     order by to_number(prov_id) desc,area_id asc
 	</select>
@@ -56,7 +57,7 @@ select prov_id,pro_name,area_id,area_desc from
       d.channel_type,n.is_all,d.querysql,
       n.channel_type_name text,d.dimension_type_name tname
        from dw_newquery_dimension_name n
-      right join 
+      left join 
       (select r.dimension_type_code,t.dimension_type_name,t.channel_type,t.querysql from dw_newquery_sub_dimension_rel r,
       dw_newquery_dimension_type t
       where 1=1 and t.type='1' 
@@ -91,22 +92,19 @@ select prov_id,pro_name,area_id,area_desc from
         order by to_number(title_id)
     </select>
     
-  <!--6查询指标树  -->
+  <!--0228 查询指标树  -->
   <select id="selectKpiTree" resultType="java.util.HashMap">
-  select r.kpi_code,m.kpi_name,m.unit,
-  m.uatio,m.format,m.kpi_ord 
-  from dw_newquery_module_kpi_rel r
-  left join 
-  DMCODE_PUB.DMCODE_COMP_KPI_MAPPING m
-  on r.kpi_code=m.kpi_code
-  where 1=1
+	select r.kpi_code,k.kpi_name,k.unit,k.uatio,k.format from dw_newquery_module_kpi_rel r
+	left join 
+	dw_newquery_kpi k
+	on r.kpi_code=k.kpi_code
+	where 1=1
 	<if test ='moduleId != null and moduleId != ""'>
 	and  r.module_code=#{moduleId}
-	</if>	
-  order by m.kpi_ord 
+	</if>	 
   </select>
   
-  <!-- 7查询日基础数据  -->
+  <!-- 查询日基础数据  -->
   <select id="selectDay" resultType="java.util.HashMap">
 	select sum(nvl(data.kpi_value, 0)) dr,<!-- 当日指标值 -->
 	sum(nvl(data.M_TM_VALUE,0)) bylj,<!-- 本月累计值 -->
@@ -132,7 +130,7 @@ select prov_id,pro_name,area_id,area_desc from
           from 	<if test ='table != null and table != ""'>${table}</if> d,
 		(select r.kpi_code from dw_newquery_module_kpi_rel r
 		left join 
-		DMCODE_PUB.DMCODE_COMP_KPI_MAPPING k
+		dw_newquery_kpi k
 		on r.kpi_code=k.kpi_code
 		where 1=1 
 			<if test ='moduleId != null and moduleId != ""'>
@@ -181,7 +179,7 @@ select prov_id,pro_name,area_id,area_desc from
   </select>
 
 
-  <!-- 8查询月基础数据  -->
+  <!-- 查询月基础数据  -->
   <select id="selectMonth" resultType="java.util.HashMap">
 	select sum(nvl(data.kpi_value, 0)) dr,<!-- 当月指标值 -->
 	sum(nvl(data.Y_TY_VALUE,0)) bylj,<!-- 本年累计值 -->
@@ -207,7 +205,7 @@ select prov_id,pro_name,area_id,area_desc from
           from 	<if test ='table != null and table != ""'>${table}</if> d,
 		(select r.kpi_code from dw_newquery_module_kpi_rel r
 		left join 
-		DMCODE_PUB.DMCODE_COMP_KPI_MAPPING k
+		dw_newquery_kpi k
 		on r.kpi_code=k.kpi_code
 		where 1=1 
 			<if test ='moduleId != null and moduleId != ""'>
@@ -234,28 +232,24 @@ select prov_id,pro_name,area_id,area_desc from
 	                <!-- 维度 -->	
 	                <foreach collection="dimensions" item="dimensionMap" index="index">
 	                	<foreach collection="dimensionMap.keys" index="index" item="key">
-	                		<if test='dimensionMap[key] != null'>
-		                	and data.${key} in
+		                	<if test='dimensionMap[key] != null'>
+		                	and data.${key} in(
 		                	<foreach collection="dimensionMap[key].keys" index="index" item="item">
-								<if test='item != "false"'>
-									 (${item} in
+								<if test='dimensionMap[key][item]!=null'>
+									${item} in
+									<foreach collection="dimensionMap[key][item]" index="index" item="id" separator="," open="(" close=")">
+										#{id}
+									</foreach>
 								</if>
-									<if test='dimensionMap[key][item] != null'>
-										<foreach collection="dimensionMap[key][item]" index="index" item="id" separator="," open="(" close=")">
-											#{id}
-										</foreach>
-									</if>								
-								<if test='item != "false"'>
-									 )
-								</if>																
 		                	</foreach>
-	                		</if>
+		                	)
+		                	</if>
 	                	</foreach>
 	                </foreach>
 		group by data.kpi_code,data.acct_date
   </select>
   
-  <!-- 9专题图标接口 -->
+  <!-- 专题图标接口 -->
   <select id="getIcons" resultType="java.util.Map">
   select subject_code,icon from dw_newquery_subject
   where 1=1

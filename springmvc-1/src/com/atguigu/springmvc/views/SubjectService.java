@@ -232,16 +232,13 @@ public class SubjectService {
 	        paramMap.put("date", paramMap.get("oneDate"));
 			if(dateType.equals(systemVariables.acctTypeDay)){
 				dataList = mapper.selectDay(paramMap);
-				paramMap.put("table", "DM.V_DM_KPI_D_001001");
-				paramMap.put("minDate", date.replace("-", ""));
-				paramMap.put("date", date.replace("-", ""));
-
+				paramMap.put("table", "V_DM_KPI_D_0010");
+				paramMap.put("minDate",date.replace("-", ""));
+				paramMap.put("date",date.replace("-", ""));
 				dataList.addAll(mapper.selectDay(paramMap));
 			}else{
 				dataList = mapper.selectMonth(paramMap);
-
-				paramMap.put("table", "DM.V_DM_KPI_M_001001");
-
+				paramMap.put("table", "V_DM_KPI_M_0010");
 				paramMap.put("minDate", date.replace("-", ""));
 				paramMap.put("date", date.replace("-", ""));
 				dataList.addAll(mapper.selectMonth(paramMap));
@@ -284,10 +281,10 @@ public class SubjectService {
     				resMap.put("ringRatio", kpiValueMap.get("ringRatio"));
     				resMap.put("identicalRatio", kpiValueMap.get("identicalRatio"));
     			}
+    			
     			List<String> value = graphformat(kpiTreeMap, map);
     			lineData.add(value.get(0));
-    			barData.add(value.get(1));
-
+    			barData.add(value.get(1)); 
     		}
     		
 			lineChartData.put("xData", xData);	
@@ -360,10 +357,10 @@ public class SubjectService {
 //		Double sytq = (Double) mData.get("sytq");
 //		Double bylj = (Double) mData.get("bylj");
 //	    1、获得基础数据oracle
-		Double dr = (Double) mData.get("dr");
-		Double zr = (Double) mData.get("zr");
-		Double sytq = (Double) mData.get("sytq");
-		Double bylj = (Double) mData.get("bylj");
+		double dr = (double) mData.get("dr");
+		double zr = (double) mData.get("zr");
+		double sytq = (double) mData.get("sytq");
+		double bylj = (double) mData.get("bylj");
 //		1、计算环比：(当日指标值-昨日指标值)/昨日指标值
     	if(zr==0){
     		valueMap.put("hb", "-");
@@ -411,26 +408,15 @@ public class SubjectService {
 	private List<String> format(Map<String, Object> kpiTree,
 				Map<String, Object> values) {
 		//1、先除 2、判断保留
-			//除数初始为1，保持原值
-			Double uatio = 1.0;
-			//单位初始为空字符串，不加单位，用于判断是否给速率加%
-			String unit = "";
-			//精确度默认是空字符串，不保留
-			String format ="";
-			if(null != kpiTree.get("UATIO")){
-				 uatio = ((BigDecimal) kpiTree.get("UATIO")).doubleValue();
-			}
-			if(null != kpiTree.get("FORMAT")){
-				format = (String) kpiTree.get("FORMAT");
-			}
+			Double uatio = ((BigDecimal) kpiTree.get("UATIO")).doubleValue();
+			String format = (String) kpiTree.get("FORMAT"); 
 			Double dr =  (Double)values.get("dr");
 			DecimalFormat  df = new DecimalFormat("######0.00");
 			DecimalFormat  dm = new DecimalFormat("######0");
-			
 			dr = dr/uatio;
 			String drz ="";
 			String byljz ="";
-			
+			String unit="";
 			if(null != kpiTree.get("UNIT")){
 				unit = (String) kpiTree.get("UNIT");
 			}
@@ -459,7 +445,7 @@ public class SubjectService {
 			}else{
 				drz = dm.format(dr);
 			}
-			//判断当月值是否加%
+			//当月值是否加%
 			if(!StringUtils.isBlank(unit)&&unit.equals("%")){
 				 drz = drz+"%";
 			}
@@ -479,6 +465,7 @@ public class SubjectService {
 			return value;
 		}
 	
+	
 	/**
 	 * 处理图表单位：精确度
 	 * @param kpiTree  指标树结构map
@@ -487,16 +474,8 @@ public class SubjectService {
 	 */
 	private List<String> graphformat(Map<String, Object> kpiTree,
 				Map<String, Object> values) {
-			//除数初始为1，保持原值
-			Double uatio = 1.0;
-			//精确度默认是空字符串，不保留
-			String format ="";
-			if(null != kpiTree.get("UATIO")){
-				 uatio = ((BigDecimal) kpiTree.get("UATIO")).doubleValue();
-			}
-			if(null != kpiTree.get("FORMAT")){
-				format = (String) kpiTree.get("FORMAT");
-			}		
+			Double uatio = ((BigDecimal) kpiTree.get("UATIO")).doubleValue();
+			String format = (String) kpiTree.get("FORMAT"); 
 			DecimalFormat  df = new DecimalFormat("######0.00");
 			DecimalFormat  dm = new DecimalFormat("######0");			
 			Double dr =  (Double)values.get("dr");
@@ -507,10 +486,10 @@ public class SubjectService {
 			dr = dr/uatio;
 			//处理本月累计值
 			bylj = bylj/uatio;
-			//处理精确度
+			//本月累计值精确度
 			if(!StringUtils.isBlank(format)&&"FM9999999999990.00".equals(format)){
-				drz = df.format(dr);
 				byljz = df.format(bylj);
+				drz = df.format(dr);
 			}else{
 				byljz = dm.format(bylj);
 				drz = dm.format(dr);
@@ -520,8 +499,6 @@ public class SubjectService {
 			value.add(byljz);
 			return value;
 		}
-	
-
 	/**
 	 * 根据kpi分组
 	 * @param date
@@ -539,6 +516,7 @@ public class SubjectService {
 			Map<String,Object> dataMap = dataList.get(i);
 			//数据表中存在该指标
 			if(!StringUtils.isBlank(kid)&&kid.equals(dataMap.get("KPI_CODE"))){
+				
 				Map<String,Object> kpiMap = new HashMap<>();
 				kpiMap.put("date", dataMap.get("ACCT_DATE"));
 				kpiMap.put("dr", ((BigDecimal) dataMap.get("DR")).doubleValue());
@@ -638,9 +616,9 @@ public class SubjectService {
         
 		//默认传基础表
 		if(dateType.equals(systemVariables.acctTypeDay)){
-			paramMap.put("table", "DM.V_DM_KPI_DATA_GJ_D");
+			paramMap.put("table", "V_DM_KPI_D_0010");
 		}else{
-			paramMap.put("table", "DM.V_DM_KPI_DATA_GJ_M");
+			paramMap.put("table", "V_DM_KPI_M_0010");
 		}
 		//维度处理
 		List<Map<String,Object>> dimensions = dimensionProcess(dimension, markType);
