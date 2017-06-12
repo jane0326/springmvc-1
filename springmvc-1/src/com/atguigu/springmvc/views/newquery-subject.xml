@@ -1,0 +1,264 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.bonc.dw3.mapper.SubjectMapper">
+	<!-- 根据code模糊查询默认参数和code-->
+    <select id="getInfosViaCode" resultType="java.util.HashMap" parameterType="java.lang.String">
+        select code, param_values value
+        from cache_init_param
+        where code like #{code}
+    </select>
+
+	<!-- 1、最大账期 -->
+	<select id="maxDate" resultType="java.util.Map">
+		select id from(
+	<choose>
+		<when test='dateType != null '>
+		select to_char(to_date(max(day_id),'yyyymmdd'),'yyyy-mm-dd') ID from dw_4g_acct_day
+		</when>
+		<otherwise>
+		select to_char(to_date(max(MONTH_ID),'yyyymm'),'yyyy-mm') ID from dw_4g_acct_month
+		</otherwise>
+	</choose>
+	)
+	</select>
+	
+	<!--2、 地势接口 -->
+	<select id="area" resultType="java.util.Map">
+select prov_id,pro_name,area_id,area_desc from 
+    (select p.prov_id,p.pro_name,a.area_id,a.area_desc,a.ord 
+    from dmcode_province p
+    left join dmcode_area a
+    on p.prov_id=a.prov_id
+    where a.is_valid = '1' and p.s_n_mark is not null and a.area_id !='999'
+    union all
+    select '111' prov_id,'全国' pro_name，area_id,area_desc,ord
+    from dmcode_area 
+    where is_valid ='1'and area_id !='999'
+    union all
+    select '112' prov_id,'北十省'pro_name,a.area_id,a.area_desc,a.ord
+    from dmcode_province p
+    left join dmcode_area a
+    on p.prov_id=a.prov_id
+    where a.is_valid = '1' and p.s_n_mark='10'and a.area_id !='999'
+    union all
+    select '113' prov_id,'南二十一省'pro_name,a.area_id,a.area_desc,a.ord
+    from dmcode_province p
+    left join dmcode_area a
+    on p.prov_id=a.prov_id
+    where a.is_valid = '1' and p.s_n_mark='21'and a.area_id!='999'
+    
+    )
+    order by to_number(prov_id) desc,area_id asc
+	</select>
+	
+ 	<!--3、筛选条件接口  -->
+    <select id="select" resultType="java.util.Map">
+      select d.dimension_type_code tid,n.dimension_code id, 
+      d.channel_type,n.is_all,d.querysql,
+      n.channel_type_name text,d.dimension_type_name tname
+       from dw_newquery_dimension_name n
+      left join 
+      (select r.dimension_type_code,t.dimension_type_name,t.channel_type,t.querysql from dw_newquery_sub_dimension_rel r,
+      dw_newquery_dimension_type t
+      where 1=1 and t.type='1' 
+			<if test ='markType != null and markType != ""'>
+			and  subject_code=#{markType}
+			</if>      
+      and r.dimension_type_code=t.dimension_type_code)d
+     on n.dimension_type_code=d.dimension_type_code
+     where n.type='1'
+     order by to_number(n.ord)
+    </select>
+    
+    <!--4、模块选项卡接口 -->
+    <select id="getModuleTab" resultType="java.util.HashMap">
+	select r.module_code tabId,m.module_name tabName from dw_newquery_subject_module_rel r
+	left join 
+	dw_newquery_subject_module m
+	on r.module_code = m.module_code
+	where 1=1
+	<if test ='markType != null and markType != ""'>
+	and  r.subject_code=#{markType}
+	</if>
+    </select>   
+    
+    <!--5、 表头title -->
+    <select id="title" resultType="String">
+        select t.title_name from dw_newquery_subject_title t
+        where 1=1 
+        <if test="markType !=null and markType!=''">
+        and t.subject_code=#{markType}
+        </if>
+        order by to_number(title_id)
+    </select>
+    
+  <!--0228 查询指标树  -->
+  <select id="selectKpiTree" resultType="java.util.HashMap">
+	select r.kpi_code,k.kpi_name,k.unit,k.uatio,k.format from dw_newquery_module_kpi_rel r
+	left join 
+	dw_newquery_kpi k
+	on r.kpi_code=k.kpi_code
+	where 1=1
+	<if test ='moduleId != null and moduleId != ""'>
+	and  r.module_code=#{moduleId}
+	</if>	 
+  </select>
+  
+  <!-- 查询日基础数据  -->
+  <select id="selectDay" resultType="java.util.HashMap">
+	select sum(nvl(data.kpi_value, 0)) dr,<!-- 当日指标值 -->
+	sum(nvl(data.M_TM_VALUE,0)) bylj,<!-- 本月累计值 -->
+	sum(nvl(data.D_LD_VALUE, 0)) zr,<!--昨日指标值  -->
+	sum(nvl(data.D_LM_VALUE,0)) sytq,<!--上月同期 值 -->
+	data.kpi_code, data.acct_date
+	  from (select k.kpi_code,
+               d.ACCT_DATE,
+               d.PROV_ID,
+               d.AREA_NO,
+	                <!-- 维度 -->	
+	                <foreach collection="dimensions" item="dimensionMap" index="index">
+	                	<foreach collection="dimensionMap.keys" index="index" item="key">
+		                	<if test="dimensionMap[key]!=null">
+		                		 d.${key},
+		                	</if>
+	                	</foreach>
+	                </foreach>               
+               d.KPI_VALUE, 
+               d.M_TM_VALUE,
+               d.D_LD_VALUE,
+               d.D_LM_VALUE
+          from 	<if test ='table != null and table != ""'>${table}</if> d,
+		(select r.kpi_code from dw_newquery_module_kpi_rel r
+		left join 
+		dw_newquery_kpi k
+		on r.kpi_code=k.kpi_code
+		where 1=1 
+			<if test ='moduleId != null and moduleId != ""'>
+			and  r.module_code=#{moduleId}
+			</if>)k
+		where d.KPI_CODE=k.kpi_code)data
+		where 1=1
+           		 <!-- 省份：111表示全国 ，112表示北10,113表示南21-->
+           		 <if test = "prov != null and prov != ''" >
+                    AND data.prov_id = #{prov}
+                 </if>
+                 <if test = "city != null and city != ''" >
+                    AND data.area_no = #{city}
+                 </if>
+                 <!--月份  -->
+                    AND data.acct_date between
+	             	<if test = "minDate != null and minDate != ''" >
+	                 	#{minDate}
+	                 </if>
+                     and 
+	                 <if test = "date != null and date != ''" >
+	                 	#{date}
+	                </if>
+	                <!-- 维度 -->	
+	                <foreach collection="dimensions" item="dimensionMap" index="index">
+	                	<foreach collection="dimensionMap.keys" index="index" item="key">
+	                		<if test='dimensionMap[key] != null'>
+		                	and data.${key} in
+		                	<foreach collection="dimensionMap[key].keys" index="index" item="item">
+								<if test='item != "false"'>
+									 (${item} in
+								</if>
+									<if test='dimensionMap[key][item] != null'>
+										<foreach collection="dimensionMap[key][item]" index="index" item="id" separator="," open="(" close=")">
+											#{id}
+										</foreach>
+									</if>								
+								<if test='item != "false"'>
+									 )
+								</if>																
+		                	</foreach>
+	                		</if>
+	                	</foreach>
+	                </foreach>
+		group by data.kpi_code,data.acct_date
+  </select>
+
+
+  <!-- 查询月基础数据  -->
+  <select id="selectMonth" resultType="java.util.HashMap">
+	select sum(nvl(data.kpi_value, 0)) dr,<!-- 当月指标值 -->
+	sum(nvl(data.Y_TY_VALUE,0)) bylj,<!-- 本年累计值 -->
+	sum(nvl(data.M_LM_VALUE, 0)) zr,<!--上期指标值  -->
+	sum(nvl(data.M_LY_VALUE,0)) sytq,<!--去年同期值 -->
+	data.kpi_code, data.acct_date 
+	  from (select k.kpi_code,
+               d.month_id acct_date,
+               d.PROV_ID,
+               d.AREA_NO,
+	                <!-- 维度 -->	
+	                <foreach collection="dimensions" item="dimensionMap" index="index">
+	                	<foreach collection="dimensionMap.keys" index="index" item="key">
+		                	<if test="dimensionMap[key]!=null">
+		                		 d.${key},
+		                	</if>
+	                	</foreach>
+	                </foreach>               
+               d.KPI_VALUE, 
+               d.Y_TY_VALUE,
+               d.M_LM_VALUE,
+               d.M_LY_VALUE
+          from 	<if test ='table != null and table != ""'>${table}</if> d,
+		(select r.kpi_code from dw_newquery_module_kpi_rel r
+		left join 
+		dw_newquery_kpi k
+		on r.kpi_code=k.kpi_code
+		where 1=1 
+			<if test ='moduleId != null and moduleId != ""'>
+			and  r.module_code=#{moduleId}
+			</if>)k
+		where d.KPI_CODE=k.kpi_code)data
+		where 1=1
+           		 <!-- 省份：111表示全国 ，112表示北10,113表示南21-->
+           		 <if test = "prov != null and prov != ''" >
+                    AND data.prov_id = #{prov}
+                 </if>
+                 <if test = "city != null and city != ''" >
+                    AND data.area_no = #{city}
+                 </if>
+                 <!--月份  -->
+                    AND data.acct_date between
+	             	<if test = "minDate != null and minDate != ''" >
+	                 	#{minDate}
+	                 </if>
+                     and 
+	                 <if test = "date != null and date != ''" >
+	                 	#{date}
+	                </if>
+	                <!-- 维度 -->	
+	                <foreach collection="dimensions" item="dimensionMap" index="index">
+	                	<foreach collection="dimensionMap.keys" index="index" item="key">
+		                	<if test='dimensionMap[key] != null'>
+		                	and data.${key} in(
+		                	<foreach collection="dimensionMap[key].keys" index="index" item="item">
+								<if test='dimensionMap[key][item]!=null'>
+									${item} in
+									<foreach collection="dimensionMap[key][item]" index="index" item="id" separator="," open="(" close=")">
+										#{id}
+									</foreach>
+								</if>
+		                	</foreach>
+		                	)
+		                	</if>
+	                	</foreach>
+	                </foreach>
+		group by data.kpi_code,data.acct_date
+  </select>
+  
+  <!-- 专题图标接口 -->
+  <select id="getIcons" resultType="java.util.Map">
+  select subject_code,icon from dw_newquery_subject
+  where 1=1
+  <if test ="markType != null ">
+  and subject_code in
+  	<foreach collection = "markType" item ="id" index="index" open="(" close=")" separator=",">
+  	  #{id}
+  	</foreach>
+  </if>
+  </select>
+</mapper>
+
